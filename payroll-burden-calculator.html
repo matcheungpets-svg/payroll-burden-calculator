@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payroll Burden Calculator</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+      color: #172033;
+      background: #f3f6fb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 32px 16px;
+    }
+
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 32px;
+      border: 1px solid #e1e7f0;
+      border-radius: 20px;
+      background: #fff;
+      box-shadow: 0 16px 48px rgb(22 39 71 / 8%);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.7rem, 4vw, 2.3rem);
+      letter-spacing: -0.04em;
+    }
+
+    .intro, .note { color: #5d687b; line-height: 1.55; }
+    .intro { margin: 10px 0 26px; }
+    .note { margin: 18px 0 0; font-size: 0.88rem; }
+
+    .inputs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-size: 0.92rem;
+      font-weight: 650;
+    }
+
+    select {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #cbd4e1;
+      border-radius: 10px;
+      background: #fff;
+      color: #172033;
+      font: inherit;
+    }
+
+    select:focus {
+      outline: 3px solid rgb(61 112 240 / 22%);
+      border-color: #3d70f0;
+    }
+
+    .results {
+      margin-top: 30px;
+      overflow: hidden;
+      border: 1px solid #e1e7f0;
+      border-radius: 14px;
+    }
+
+    .results-header, .row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(110px, 1fr));
+      gap: 12px;
+      align-items: center;
+      padding: 14px 18px;
+    }
+
+    .results-header {
+      background: #f5f7fb;
+      color: #5d687b;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .row { border-top: 1px solid #edf0f5; }
+    .row strong { text-align: right; font-variant-numeric: tabular-nums; }
+    .row span:last-child { text-align: right; }
+
+    .row.total {
+      background: #f1f5ff;
+      color: #153b91;
+      font-size: 1.05rem;
+      font-weight: 750;
+    }
+
+    .row.metric { color: #33415b; }
+    .results-header span:not(:first-child) { text-align: right; }
+
+    @media (max-width: 600px) {
+      main { padding: 22px 16px; }
+      .inputs { grid-template-columns: 1fr; gap: 14px; }
+      .results-header, .row {
+        grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(84px, 1fr));
+        gap: 8px;
+        padding: 12px;
+        font-size: 0.88rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Payroll Burden Calculator</h1>
+    <p class="intro">
+      Estimate the employer’s cost of compensation for one biweekly pay period
+      and across a full year.
+    </p>
+
+    <section class="inputs" aria-label="Payroll assumptions">
+      <label for="gross">Gross pay per period ($)
+        <select id="gross"></select>
+      </label>
+      <label for="taxRate">Employer tax rate (%)
+        <select id="taxRate"></select>
+      </label>
+      <label for="benefits">Benefits per period ($)
+        <select id="benefits"></select>
+      </label>
+      <label for="matchRate">Retirement match (% of gross pay)
+        <select id="matchRate"></select>
+      </label>
+    </section>
+
+    <section class="results" aria-label="Calculated employer costs" aria-live="polite">
+      <div class="results-header">
+        <span>Cost or metric</span>
+        <span>Per period</span>
+        <span>Annual (26 periods)</span>
+      </div>
+      <div class="row"><span>Gross pay</span><strong id="grossPeriod"></strong><span id="grossAnnual"></span></div>
+      <div class="row"><span>Employer taxes</span><strong id="taxPeriod"></strong><span id="taxAnnual"></span></div>
+      <div class="row"><span>Benefits</span><strong id="benefitsPeriod"></strong><span id="benefitsAnnual"></span></div>
+      <div class="row"><span>Retirement match</span><strong id="matchPeriod"></strong><span id="matchAnnual"></span></div>
+      <div class="row total"><span>Total employer cost</span><strong id="totalPeriod"></strong><span id="totalAnnual"></span></div>
+      <div class="row metric"><span>Burden rate</span><strong id="burdenPeriod"></strong><span id="burdenAnnual"></span></div>
+      <div class="row metric"><span>Cost multiplier</span><strong id="multiplierPeriod"></strong><span id="multiplierAnnual"></span></div>
+    </section>
+
+    <p class="note">
+      Estimates only. Employer tax rates and benefit costs vary; confirm applicable
+      costs with your payroll provider or tax professional.
+    </p>
+  </main>
+
+  <script>
+    const periodsPerYear = 26;
+    const controls = {
+      gross: document.querySelector("#gross"),
+      taxRate: document.querySelector("#taxRate"),
+      benefits: document.querySelector("#benefits"),
+      matchRate: document.querySelector("#matchRate")
+    };
+
+    function addOptions(select, values, format, selectedValue) {
+      for (const value of values) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = format(value);
+        if (value === selectedValue) option.selected = true;
+        select.append(option);
+      }
+    }
+
+    const dollars = value => new Intl.NumberFormat("en-US", {
+      style: "currency", currency: "USD", maximumFractionDigits: 2
+    }).format(value);
+
+    addOptions(controls.gross,
+      Array.from({ length: 40 }, (_, i) => (i + 1) * 250),
+      value => dollars(value), 3000);
+
+    addOptions(controls.taxRate,
+      Array.from({ length: 41 }, (_, i) => i * 0.5),
+      value => `${value.toFixed(2).replace(/\.?0+$/, "")}%`, 7.65);
+
+    addOptions(controls.benefits,
+      Array.from({ length: 41 }, (_, i) => i * 50),
+      value => dollars(value), 350);
+
+    addOptions(controls.matchRate,
+      Array.from({ length: 21 }, (_, i) => i * 0.5),
+      value => `${value.toFixed(2).replace(/\.?0+$/, "")}%`, 4);
+
+    function setText(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function update() {
+      const gross = Number(controls.gross.value);
+      const taxRate = Number(controls.taxRate.value) / 100;
+      const benefits = Number(controls.benefits.value);
+      const matchRate = Number(controls.matchRate.value) / 100;
+
+      const taxes = gross * taxRate;
+      const match = gross * matchRate;
+      const total = gross + taxes + benefits + match;
+      const burdenRate = gross === 0 ? 0 : (total - gross) / gross;
+      const multiplier = gross === 0 ? 0 : total / gross;
+
+      for (const [key, value] of Object.entries({ gross, taxes, benefits, match, total })) {
+        const id = key === "taxes" ? "tax" : key;
+        setText(`${id}Period`, dollars(value));
+        setText(`${id}Annual`, dollars(value * periodsPerYear));
+      }
+
+      setText("burdenPeriod", `${(burdenRate * 100).toFixed(2)}%`);
+      setText("burdenAnnual", `${(burdenRate * 100).toFixed(2)}%`);
+      setText("multiplierPeriod", `${multiplier.toFixed(3)}×`);
+      setText("multiplierAnnual", `${multiplier.toFixed(3)}×`);
+    }
+
+    Object.values(controls).forEach(select => select.addEventListener("change", update));
+    update();
+  </script>
+</body>
+</html>
